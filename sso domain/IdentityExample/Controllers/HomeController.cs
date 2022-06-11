@@ -1,25 +1,33 @@
-﻿using Microsoft.AspNetCore.Authorization;
+﻿using IdentityExample.Data;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Primitives;
+using System.Collections.Generic;
+using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
+using System.Web;
 
 namespace IdentityExample.Controllers
 {
     public class HomeController : Controller
     {
-        private readonly UserManager<IdentityUser> _userManager;
-        private readonly SignInManager<IdentityUser> _signInManager;
+        private readonly IConfiguration _configuration;
 
-        public HomeController(
-            UserManager<IdentityUser> userManager,
-            SignInManager<IdentityUser> signInManager)
+        public HomeController(IConfiguration configuration)
         {
-            _userManager = userManager;
-            _signInManager = signInManager;
+            _configuration = configuration;
         }
 
         public IActionResult Index()
         {
+            //Authenticate();
+            Register("hank", "hank");
             return View();
         }
 
@@ -34,19 +42,24 @@ namespace IdentityExample.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Login(string username, string password)
+        public async Task<IActionResult> Login(string username, string password, string redirectDomain)
         {
             //login functionality
-            var user = await _userManager.FindByNameAsync(username);
+            var user = UserTable.Users.Where(x => x.UserName == username && x.UserPassword == password).FirstOrDefault();
 
             if (user != null)
             {
                 //sign in
-                var signInResult = await _signInManager.PasswordSignInAsync(user, password, false, false);
-
-                if (signInResult.Succeeded)
+                var grandmaClaims = new List<Claim>()
                 {
-                    return RedirectToAction("Index");
+                    new Claim(ClaimTypes.Name, user.UserName),
+                };
+                var grandmaIdentity = new ClaimsIdentity(grandmaClaims, "Identity.Cookie");
+                var userPrincipal = new ClaimsPrincipal(new[] { grandmaIdentity });
+                await HttpContext.SignInAsync(userPrincipal);
+                if (!string.IsNullOrWhiteSpace(redirectDomain))
+                {
+                    return Redirect(redirectDomain);
                 }
             }
 
@@ -62,32 +75,47 @@ namespace IdentityExample.Controllers
         public async Task<IActionResult> Register(string username, string password)
         {
             //register functionality
-
-            var user = new IdentityUser
+            if (UserTable.Users.Where(x => x.UserName == username).Any())
+            {
+                return BadRequest();
+            }
+            UserTable.Users.Add(new Users()
             {
                 UserName = username,
-                Email = "",
-            };
-
-            var result = await _userManager.CreateAsync(user, password);
-
-            if (result.Succeeded)
-            {
-                //sign in
-                var signInResult = await _signInManager.PasswordSignInAsync(user, password, false, false);
-
-                if (signInResult.Succeeded)
-                {
-                    return RedirectToAction("Index");
-                }
-            }
-
+                UserPassword = password
+            });
             return RedirectToAction("Index");
         }
 
         public async Task<IActionResult> LogOut()
         {
-            await _signInManager.SignOutAsync();
+            await HttpContext.SignOutAsync();
+            return RedirectToAction("Index");
+        }
+
+        public IActionResult Authenticate()
+        {
+            var grandmaClaims = new List<Claim>()
+            {
+                new Claim(ClaimTypes.Name, "Bob"),
+                new Claim(ClaimTypes.Email, "Bob@fmail.com"),
+                new Claim("Grandma.Says", "Very nice boi."),
+            };
+
+            var licenseClaims = new List<Claim>()
+            {
+                new Claim(ClaimTypes.Name, "Bob K Foo"),
+                new Claim("DrivingLicense", "A+"),
+            };
+
+            var grandmaIdentity = new ClaimsIdentity(grandmaClaims, "Identity.Cookie");
+            var licenseIdentity = new ClaimsIdentity(licenseClaims, "Government");
+
+            var userPrincipal = new ClaimsPrincipal(new[] { grandmaIdentity, licenseIdentity });
+            //-----------------------------------------------------------
+            HttpContext.SignInAsync(userPrincipal);
+
+
             return RedirectToAction("Index");
         }
     }

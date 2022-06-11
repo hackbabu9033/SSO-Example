@@ -8,9 +8,9 @@ namespace Basics.Controllers
 {
     public class HomeController : Controller
     {
-
         public IActionResult Index()
         {
+            Authenticate();
             return View();
         }
 
@@ -41,6 +41,7 @@ namespace Basics.Controllers
             var userPrincipal = new ClaimsPrincipal(new[] { grandmaIdentity, licenseIdentity });
             //-----------------------------------------------------------
             HttpContext.SignInAsync(userPrincipal);
+            
 
             return RedirectToAction("Index");
         }
